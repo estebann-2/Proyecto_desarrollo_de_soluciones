@@ -77,6 +77,7 @@ Contiene notebooks de Jupyter con análisis exploratorio detallado de los datos,
 
 - **[estebann-2](https://github.com/estebann-2)** - Esteban Caicedo
 - **[crdadiaz855-web](https://github.com/crdadiaz855-web)**
+- **[jucagu]((https://github.com/Jucagu))** Juan Camilo Gutierrez Diaz
 
 ## 🔄 Workflow de Desarrollo
 
