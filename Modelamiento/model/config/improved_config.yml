@@ -1,0 +1,37 @@
+
+# Configuración del modelo mejorado
+model_config:
+  algorithm_name: 'random_forest_improved'
+  n_estimators: 200        # Incrementado de 100
+  max_depth: 15            # Incrementado de 10  
+  min_samples_split: 5     # Nuevo parámetro
+  min_samples_leaf: 2      # Nuevo parámetro
+  max_features: 'sqrt'     # Nuevo parámetro
+  random_state: 42
+  n_jobs: -1
+
+# Configuración de preprocesamiento
+preprocessing:
+  remove_outliers: true
+  outlier_method: 'iqr'
+  iqr_factor: 2.0
+  transform_target: true
+  target_transformation: 'log_plus_one'
+
+# Características a utilizar
+features:
+  use_advanced_features: true
+  total_features: 42
+  feature_engineering:
+    - temporal_advanced
+    - trend_volatility  
+    - momentum
+    - rank_percentile
+    - autocorrelation
+    - outlier_detection
+
+# Métricas objetivo (basadas en test)
+target_metrics:
+  min_r2: 0.8              # Basado en resultados del test
+  max_smape: 10.0          # Basado en resultados del test
+  min_improvement: 50.0    # % mínimo de mejora esperado

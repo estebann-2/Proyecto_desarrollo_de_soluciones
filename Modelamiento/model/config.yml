@@ -1,0 +1,145 @@
+# Nombre del paquete
+package_name: modelo-lifemiles-forecast-improved
+
+# Archivos de datos
+train_data_file: data_lifemiles.csv
+test_data_file: data_lifemiles.csv
+
+# Variables
+# Objetivo - variable que queremos predecir
+target: billings
+
+# CONFIGURACIÓN MEJORADA - Features completas basadas en test de 2 tiendas
+# Features temporales básicas
+base_features:
+  - year
+  - month
+  - day_of_week
+  - day_of_month
+
+# Features temporales avanzadas
+advanced_temporal_features:
+  - quarter
+  - week_of_year
+  - is_weekend
+  - is_month_start
+  - is_month_end
+
+# Features de lag mejoradas (valores anteriores)
+lag_features:
+  - billings_lag_1
+  - billings_lag_2
+  - billings_lag_3
+  - billings_lag_7
+  - billings_lag_14
+  - billings_lag_30
+
+# Features de rolling estadísticas móvilesrolling_features:
+  - billings_rolling_7_mean
+  - billings_rolling_7_std
+  - billings_rolling_30_mean
+  - billings_rolling_30_std
+
+# Features avanzadas de tendencia
+trend_features:
+  - billings_trend_3
+  - billings_trend_7
+  - billings_trend_14
+  - billings_trend_30
+
+# Features de volatilidad
+volatility_features:
+  - billings_volatility_3
+  - billings_volatility_7
+  - billings_volatility_14
+  - billings_volatility_30
+
+# Features de momentum
+momentum_features:
+  - billings_momentum_1
+  - billings_momentum_3
+  - billings_momentum_7
+  - billings_momentum_pct_1
+  - billings_momentum_pct_3
+  - billings_momentum_pct_7
+
+# Features de ranking
+rank_features:
+  - billings_rank_7
+  - billings_rank_30
+
+# Features de autocorrelación
+autocorr_features:
+  - billings_autocorr_7
+  - billings_autocorr_14
+  - billings_autocorr_30
+
+# Features de detección de outliers
+outlier_detection_features:
+  - billings_zscore_7
+  - billings_zscore_30
+  - billings_is_outlier_7
+  - billings_is_outlier_30
+
+# Variables categóricas
+categorical_features:
+  - partner_code
+  - store_code
+
+# Columnas de fecha
+date_column: date
+store_id_column: store_code
+partner_id_column: partner_code
+
+# pipelines
+pipeline_name: modelo-lifemiles-forecast-improved
+pipeline_save_file: modelo-lifemiles-forecast-improved-output
+
+# fracción del conjunto de prueba
+test_size: 0.2
+
+# semilla
+random_state: 42
+
+# HIPERPARÁMETROS MEJORADOS del modelo Random Forest
+n_estimators: 200        # Incrementado de 100
+max_depth: 15            # Incrementado de 10  
+min_samples_split: 5     # Mantenido
+min_samples_leaf: 2      # Mantenido
+max_features: sqrt       # Nuevo parámetro optimizado
+
+# CONFIGURACIÓN DE PREPROCESAMIENTO MEJORADA
+# Transformación de variable objetivo
+use_target_transformation: true
+target_transformation_method: log_plus_one
+
+# Parámetros mejorados para outlier removal
+outlier_method: iqr
+outlier_factor: 2.0      
+
+# Feature engineering avanzado
+use_advanced_features: true
+use_trend_features: true
+use_volatility_features: true
+use_momentum_features: true
+use_autocorr_features: true
+use_outlier_detection_features: true
+
+# Parámetros para forecasting
+forecast_days: 28
+
+# Fecha de corte para entrenamiento (se actualiza en cada ejecución)
+cutoff_date: '2025-09-03'
+
+# MÉTRICAS OBJETIVO (basadas en test exitoso)
+# Estos valores representan la performance esperada
+target_metrics:
+  min_r2_score: 0.8          
+  max_smape_score: 10.0      
+  min_improvement_pct: 50.0  
+
+# Configuración MLflow
+mlflow:
+  experiment_name: "LifeMiles_Forecast_Improved"
+  tracking_uri: "file:./mlruns"
+  model_name: "LifeMiles_RandomForest_Improved"
