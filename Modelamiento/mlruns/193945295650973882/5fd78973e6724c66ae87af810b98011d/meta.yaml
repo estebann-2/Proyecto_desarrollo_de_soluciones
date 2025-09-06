@@ -1,0 +1,16 @@
+artifact_uri: file:///Users/esteban.caicedo/Library/CloudStorage/Box-Box/DATA/Esteban/MaIA/4
+  Semestre/Proyecto desarrollo de soluciones/Proyecto_desarrollo_de_soluciones/Modelamiento/mlruns/193945295650973882/5fd78973e6724c66ae87af810b98011d/artifacts
+end_time: 1757188667478
+entry_point_name: ''
+experiment_id: '193945295650973882'
+lifecycle_stage: active
+run_id: 5fd78973e6724c66ae87af810b98011d
+run_name: Training_Pipeline_20250906_145613
+run_uuid: 5fd78973e6724c66ae87af810b98011d
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1757188576145
+status: 4
+tags: []
+user_id: esteban.caicedo

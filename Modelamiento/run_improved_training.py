@@ -125,6 +125,13 @@ def main():
         print(f"  - Models: model/trained/")
         print(f"  - Pipeline: model/trained/")
         print(f"  - MLflow logs: mlruns/")
+        print(f"  - MLflow UI: Run 'python mlflow_explorer.py --serve' to view results")
+        
+        print(f"\nMLflow Tracking Information:")
+        print(f"  - Experiment: LifeMiles_Forecasting_Training")
+        print(f"  - Individual models logged for each store")
+        print(f"  - Aggregate metrics logged for the training pipeline")
+        print(f"  - Use mlflow_explorer.py to analyze results")
         
         print(f"\nReady for production forecasting!")
         

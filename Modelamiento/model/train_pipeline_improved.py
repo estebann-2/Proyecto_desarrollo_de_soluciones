@@ -4,8 +4,16 @@ from typing import Dict, List, Tuple
 from joblib import Parallel, delayed
 import warnings
 warnings.filterwarnings('ignore')
+import mlflow
+import mlflow.sklearn
+from datetime import datetime
+import tempfile
+import joblib
+import os
+import json
 
 from config.core import config
+from config.mlflow_config import initialize_mlflow_for_training
 from pipeline_improved import lifemiles_improved_preprocessing_pipe, lifemiles_improved_forecast_pipe
 from processing.data_manager import load_dataset, save_pipeline, save_store_models
 from processing.features_improved import get_improved_feature_columns, TargetTransformer
@@ -139,6 +147,57 @@ def train_store_model_improved(store_data: pd.DataFrame, store_code: str, partne
         else:
             feature_importance = {}
         
+        # MLflow Tracking - Log del entrenamiento individual
+        with mlflow.start_run(nested=True):
+            # Log de parámetros del modelo
+            mlflow.log_param("store_code", store_code)
+            mlflow.log_param("partner_code", partner_code)
+            mlflow.log_param("n_features", len(available_features))
+            mlflow.log_param("train_samples", len(X_train))
+            mlflow.log_param("test_samples", len(X_test))
+            mlflow.log_param("model_type", type(model).__name__)
+            
+            # Log de métricas de entrenamiento
+            mlflow.log_metric("train_mae", train_mae)
+            mlflow.log_metric("train_rmse", train_rmse)
+            mlflow.log_metric("train_r2", train_r2)
+            mlflow.log_metric("train_smape", train_smape)
+            
+            # Log de métricas de validación
+            mlflow.log_metric("test_mae", test_mae)
+            mlflow.log_metric("test_rmse", test_rmse)
+            mlflow.log_metric("test_r2", test_r2)
+            mlflow.log_metric("test_smape", test_smape)
+            
+            # Log de calidad del modelo
+            mlflow.log_param("model_quality", quality)
+            
+            # Log del modelo y artefactos
+            mlflow.sklearn.log_model(
+                sk_model=model,
+                artifact_path="model",
+                registered_model_name=f"lifemiles_store_{partner_code}_{store_code}"
+            )
+            
+            # Log del scaler como artefacto
+            with tempfile.TemporaryDirectory() as temp_dir:
+                scaler_path = os.path.join(temp_dir, "scaler.pkl")
+                joblib.dump(scaler, scaler_path)
+                mlflow.log_artifact(scaler_path, "preprocessing")
+            
+            # Log de feature importance si está disponible
+            if feature_importance:
+                with tempfile.TemporaryDirectory() as temp_dir:
+                    importance_path = os.path.join(temp_dir, "feature_importance.json")
+                    with open(importance_path, 'w') as f:
+                        json.dump(feature_importance, f, indent=2)
+                    mlflow.log_artifact(importance_path, "analysis")
+            
+            # Tags para organización
+            mlflow.set_tag("store_id", f"{partner_code}_{store_code}")
+            mlflow.set_tag("model_quality", quality)
+            mlflow.set_tag("training_date", datetime.now().strftime("%Y-%m-%d"))
+        
         print(f"Model trained - R²: {test_r2:.3f}, SMAPE: {test_smape:.1f}%, Quality: {quality}")
         
         return {
@@ -183,156 +242,204 @@ def run_training_improved(max_stores: int = None, min_samples: int = 1, verbose:
         Dict: Training results including metrics and model performance
     """
     
-    print("STARTING IMPROVED LIFEMILES TRAINING PIPELINE")
-    print("=" * 60)
+    # Inicializar MLflow tracking
+    mlflow_config = initialize_mlflow_for_training()
+    print(f"MLflow initialized: {mlflow_config['experiment_name']}")
     
-    if max_stores:
-        print(f"LIMITED TRAINING MODE: {max_stores} stores")
-    else:
-        print(f"FULL TRAINING MODE: All stores")
-    
-    if verbose:
-        print(f"Verbose mode: ENABLED")
-    
-    # Cargar datos
-    print("Loading data...")
-    data = load_dataset(file_name=config.app_config.train_data_file)
-    print(f"Data loaded: {data.shape}")
-    
-    # Aplicar preprocesamiento global
-    print("Applying preprocessing...")
-    data_processed = create_features_for_store(data)
-    print(f"Features created: {data_processed.shape}")
-    
-    # Obtener tiendas únicas
-    stores = data_processed[['partner_code', 'store_code']].drop_duplicates()
-    print(f"Total stores available: {len(stores)}")
-    
-    # Filtrar tiendas con suficientes datos
-    store_counts = data_processed.groupby(['partner_code', 'store_code']).size()
-    valid_stores = stores.merge(
-        store_counts[store_counts >= min_samples].reset_index(),
-        on=['partner_code', 'store_code']
-    )
-    
-    print(f"Stores with sufficient data (>={min_samples}): {len(valid_stores)}")
-    
-    # Limitar número de tiendas si se especifica
-    if max_stores and max_stores < len(valid_stores):
-        valid_stores = valid_stores.head(max_stores)
-        print(f"Training limited to: {len(valid_stores)} stores")
-    
-    print("Training models...")
-    if verbose:
-        store_names = [f"{row['partner_code']}_{row['store_code']}" for _, row in valid_stores.iterrows()]
-        print(f"Stores to process: {store_names}")
-    print()
-    
-    def train_single_store(row):
-        partner_code = row['partner_code']
-        store_code = row['store_code']
-        store_data = data_processed[
-            (data_processed['partner_code'] == partner_code) & 
-            (data_processed['store_code'] == store_code)
-        ].copy()
-        return train_store_model_improved(store_data, store_code, partner_code)
-    
-    # Entrenar modelos
-    results = []
-    for _, row in valid_stores.iterrows():
-        result = train_single_store(row)
-        if result is not None:
-            results.append(result)
-    
-    # Filtrar resultados exitosos
-    successful_results = [r for r in results if r is not None]
-    
-    print(f"\nTRAINING SUMMARY:")
-    print(f"  Total stores attempted: {len(valid_stores)}")
-    print(f"  Successful models: {len(successful_results)}")
-    print(f"  Success rate: {len(successful_results)/len(valid_stores)*100:.1f}%")
-    
-    if max_stores:
-        print(f"  Limited training mode: {max_stores} stores requested")
-    
-    if verbose and successful_results:
-        print(f"\nSUCCESSFUL STORES:")
-        for result in successful_results[:10]:  # Mostrar primeras 10
-            store_id = f"{result['partner_code']}_{result['store_code']}"
-            r2 = result['test_metrics']['r2']
-            smape = result['test_metrics']['smape'] 
-            quality = result['quality']
-            print(f"    {store_id}: R²={r2:.3f}, SMAPE={smape:.1f}%, Quality={quality}")
-        if len(successful_results) > 10:
-            print(f"    ... and {len(successful_results)-10} more stores")
-    
-    if successful_results:
-        # Estadísticas de calidad
-        r2_scores = [r['test_metrics']['r2'] for r in successful_results]
-        smape_scores = [r['test_metrics']['smape'] for r in successful_results]
+    # Iniciar el run principal del experimento
+    with mlflow.start_run(run_name=f"Training_Pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}"):
         
-        quality_counts = {}
-        for r in successful_results:
-            quality = r['quality']
-            quality_counts[quality] = quality_counts.get(quality, 0) + 1
+        print("STARTING IMPROVED LIFEMILES TRAINING PIPELINE")
+        print("=" * 60)
         
-        print(f"\nMODEL QUALITY DISTRIBUTION:")
-        for quality, count in quality_counts.items():
-            pct = count / len(successful_results) * 100
-            print(f"  {quality}: {count} models ({pct:.1f}%)")
+        if max_stores:
+            print(f"LIMITED TRAINING MODE: {max_stores} stores")
+        else:
+            print(f"FULL TRAINING MODE: All stores")
         
-        print(f"\nPERFORMANCE METRICS:")
-        print(f"  Average R²: {np.mean(r2_scores):.3f} ± {np.std(r2_scores):.3f}")
-        print(f"  Average SMAPE: {np.mean(smape_scores):.1f}% ± {np.std(smape_scores):.1f}%")
-        print(f"  Best R²: {np.max(r2_scores):.3f}")
-        print(f"  Best SMAPE: {np.min(smape_scores):.1f}%")
+        if verbose:
+            print(f"Verbose mode: ENABLED")
         
-        # Guardar modelos
-        print(f"\nSaving models...")
+        # Log de parámetros del experimento principal
+        mlflow.log_param("max_stores", max_stores if max_stores else "all")
+        mlflow.log_param("min_samples", min_samples)
+        mlflow.log_param("verbose", verbose)
+        mlflow.log_param("training_date", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
         
-        # Adaptar formato para save_store_models
-        models_for_saving = []
-        for result in successful_results:
-            model_data = {
-                'store_code': result['store_code'],
-                'partner_code': result['partner_code'],
-                'model': result['model'],
-                'scaler': result['scaler'],
-                'mae': result['test_metrics']['mae'],
-                'rmse': result['test_metrics']['rmse'],
-                'features': result['feature_columns'],
-                'train_samples': result['train_samples'],
-                'val_samples': result['test_samples']
-            }
-            models_for_saving.append(model_data)
+        # Cargar datos
+        print("Loading data...")
+        data = load_dataset(file_name=config.app_config.train_data_file)
+        print(f"Data loaded: {data.shape}")
         
-        save_store_models(models_data=models_for_saving)
+        # Log de información del dataset
+        mlflow.log_param("dataset_shape", f"{data.shape[0]}x{data.shape[1]}")
+        mlflow.log_param("dataset_file", config.app_config.train_data_file)
         
-        # Guardar pipeline de preprocesamiento
-        save_pipeline(pipeline_to_persist=lifemiles_improved_preprocessing_pipe)
+        # Aplicar preprocesamiento global
+        print("Applying preprocessing...")
+        data_processed = create_features_for_store(data)
+        print(f"Features created: {data_processed.shape}")
         
-        print(f"IMPROVED TRAINING COMPLETED SUCCESSFULLY!")
+        # Obtener tiendas únicas
+        stores = data_processed[['partner_code', 'store_code']].drop_duplicates()
+        print(f"Total stores available: {len(stores)}")
         
-        # Evaluar si se cumplieron las métricas objetivo
-        avg_r2 = np.mean(r2_scores)
-        avg_smape = np.mean(smape_scores)
+        # Filtrar tiendas con suficientes datos
+        store_counts = data_processed.groupby(['partner_code', 'store_code']).size()
+        valid_stores = stores.merge(
+            store_counts[store_counts >= min_samples].reset_index(),
+            on=['partner_code', 'store_code']
+        )
         
-        target_r2 = getattr(config.model_config, 'target_metrics', {}).get('min_r2_score', 0.8)
-        target_smape = getattr(config.model_config, 'target_metrics', {}).get('max_smape_score', 10.0)
+        print(f"Stores with sufficient data (>={min_samples}): {len(valid_stores)}")
         
-        print(f"\nTARGET ACHIEVEMENT:")
-        r2_achieved = "ACHIEVED" if avg_r2 >= target_r2 else "NOT ACHIEVED"
-        smape_achieved = "ACHIEVED" if avg_smape <= target_smape else "NOT ACHIEVED"
+        # Limitar número de tiendas si se especifica
+        if max_stores and max_stores < len(valid_stores):
+            valid_stores = valid_stores.head(max_stores)
+            print(f"Training limited to: {len(valid_stores)} stores")
+        
+        print("Training models...")
+        if verbose:
+            store_names = [f"{row['partner_code']}_{row['store_code']}" for _, row in valid_stores.iterrows()]
+            print(f"Stores to process: {store_names}")
+        print()
+        
+        def train_single_store(row):
+            partner_code = row['partner_code']
+            store_code = row['store_code']
+            store_data = data_processed[
+                (data_processed['partner_code'] == partner_code) & 
+                (data_processed['store_code'] == store_code)
+            ].copy()
+            return train_store_model_improved(store_data, store_code, partner_code)
+        
+        # Entrenar modelos
+        results = []
+        for _, row in valid_stores.iterrows():
+            result = train_single_store(row)
+            if result is not None:
+                results.append(result)
+        
+        # Filtrar resultados exitosos
+        successful_results = [r for r in results if r is not None]
+        
+        print(f"\nTRAINING SUMMARY:")
+        print(f"  Total stores attempted: {len(valid_stores)}")
+        print(f"  Successful models: {len(successful_results)}")
+        print(f"  Success rate: {len(successful_results)/len(valid_stores)*100:.1f}%")
+        
+        if max_stores:
+            print(f"  Limited training mode: {max_stores} stores requested")
+        
+        if verbose and successful_results:
+            print(f"\nSUCCESSFUL STORES:")
+            for result in successful_results[:10]:  # Mostrar primeras 10
+                store_id = f"{result['partner_code']}_{result['store_code']}"
+                r2 = result['test_metrics']['r2']
+                smape = result['test_metrics']['smape'] 
+                quality = result['quality']
+                print(f"    {store_id}: R²={r2:.3f}, SMAPE={smape:.1f}%, Quality={quality}")
+            if len(successful_results) > 10:
+                print(f"    ... and {len(successful_results)-10} more stores")
+        
+        if successful_results:
+            # Estadísticas de calidad
+            r2_scores = [r['test_metrics']['r2'] for r in successful_results]
+            smape_scores = [r['test_metrics']['smape'] for r in successful_results]
+            
+            quality_counts = {}
+            for r in successful_results:
+                quality = r['quality']
+                quality_counts[quality] = quality_counts.get(quality, 0) + 1
+            
+            print(f"\nMODEL QUALITY DISTRIBUTION:")
+            for quality, count in quality_counts.items():
+                pct = count / len(successful_results) * 100
+                print(f"  {quality}: {count} models ({pct:.1f}%)")
+            
+            print(f"\nPERFORMANCE METRICS:")
+            print(f"  Average R²: {np.mean(r2_scores):.3f} ± {np.std(r2_scores):.3f}")
+            print(f"  Average SMAPE: {np.mean(smape_scores):.1f}% ± {np.std(smape_scores):.1f}%")
+            print(f"  Best R²: {np.max(r2_scores):.3f}")
+            print(f"  Best SMAPE: {np.min(smape_scores):.1f}%")
+            
+            # Guardar modelos
+            print(f"\nSaving models...")
+            
+            # Adaptar formato para save_store_models
+            models_for_saving = []
+            for result in successful_results:
+                model_data = {
+                    'store_code': result['store_code'],
+                    'partner_code': result['partner_code'],
+                    'model': result['model'],
+                    'scaler': result['scaler'],
+                    'mae': result['test_metrics']['mae'],
+                    'rmse': result['test_metrics']['rmse'],
+                    'features': result['feature_columns'],
+                    'train_samples': result['train_samples'],
+                    'val_samples': result['test_samples']
+                }
+                models_for_saving.append(model_data)
+            
+            save_store_models(models_data=models_for_saving)
+            
+            # Guardar pipeline de preprocesamiento
+            save_pipeline(pipeline_to_persist=lifemiles_improved_preprocessing_pipe)
+            
+            print(f"IMPROVED TRAINING COMPLETED SUCCESSFULLY!")
+            
+            # Evaluar si se cumplieron las métricas objetivo
+            avg_r2 = np.mean(r2_scores)
+            avg_smape = np.mean(smape_scores)
+            
+            target_r2 = getattr(config.model_config, 'target_metrics', {}).get('min_r2_score', 0.8)
+            target_smape = getattr(config.model_config, 'target_metrics', {}).get('max_smape_score', 10.0)
+            
+            print(f"\nTARGET ACHIEVEMENT:")
+            r2_achieved = "ACHIEVED" if avg_r2 >= target_r2 else "NOT ACHIEVED"
+            smape_achieved = "ACHIEVED" if avg_smape <= target_smape else "NOT ACHIEVED"
         
         print(f"  R² Target ({target_r2:.1f}): {r2_achieved} Achieved {avg_r2:.3f}")
         print(f"  SMAPE Target ({target_smape:.1f}%): {smape_achieved} Achieved {avg_smape:.1f}%")
         
-    return {
-        'total_stores': len(valid_stores),
-        'successful_models': len(successful_results),
-        'results': successful_results,
-        'pipeline': lifemiles_improved_preprocessing_pipe
-    }
+        # MLflow - Log de métricas agregadas del experimento
+        mlflow.log_metric("total_stores_attempted", len(valid_stores))
+        mlflow.log_metric("successful_models", len(successful_results))
+        mlflow.log_metric("success_rate", len(successful_results)/len(valid_stores)*100 if len(valid_stores) > 0 else 0)
+        
+        if successful_results:
+            # Métricas de rendimiento promedio
+            mlflow.log_metric("avg_r2", avg_r2)
+            mlflow.log_metric("avg_smape", avg_smape)
+            mlflow.log_metric("std_r2", np.std(r2_scores))
+            mlflow.log_metric("std_smape", np.std(smape_scores))
+            mlflow.log_metric("best_r2", np.max(r2_scores))
+            mlflow.log_metric("best_smape", np.min(smape_scores))
+            
+            # Distribución de calidad
+            for quality, count in quality_counts.items():
+                pct = count / len(successful_results) * 100
+                mlflow.log_metric(f"quality_{quality.lower()}_count", count)
+                mlflow.log_metric(f"quality_{quality.lower()}_pct", pct)
+            
+            # Logros de objetivos
+            mlflow.log_metric("r2_target_achieved", 1 if avg_r2 >= target_r2 else 0)
+            mlflow.log_metric("smape_target_achieved", 1 if avg_smape <= target_smape else 0)
+            
+            # Tags para organización
+            mlflow.set_tag("experiment_type", "batch_training")
+            mlflow.set_tag("data_size", f"{data.shape[0]} rows")
+            mlflow.set_tag("training_mode", "limited" if max_stores else "full")
+            
+        print(f"\nMLflow experiment logged successfully!")
+        
+        return {
+            'total_stores': len(valid_stores),
+            'successful_models': len(successful_results),
+            'results': successful_results,
+            'pipeline': lifemiles_improved_preprocessing_pipe
+        }
 
 
 if __name__ == "__main__":
