@@ -1,336 +1,329 @@
-# Documentación del Módulo de Modelamiento - LifeMiles
+# Documentación del Sistema de Modelamiento LifeMiles
 
-## Descripción General
+## Descripción General del Proyecto
 
-El módulo de **Modelamiento** es el núcleo del sistema de predicción de millas LifeMiles. Implementa un pipeline completo de machine learning para el forecasting de millas por tienda, utilizando Random Forest con características avanzadas de ingeniería de features y integración con MLflow para tracking de experimentos.
+Este proyecto tiene como objetivo desarrollar un sistema de modelos de machine learning para predecir las ventas (`billings`) en los puntos de venta de las marcas aliadas de LifeMiles. Utilizando datos históricos de transacciones, como montos, millas acumuladas, comercios y comportamiento del socio (cliente), el sistema generará pronósticos de ventas a nivel de tienda, marca y/o cliente.
+
+### Objetivos del Sistema
+- **Variable objetivo principal**: `billings` (ventas/facturación)
+- **Nivel de predicción**: Por tienda individual (store_id)
+- **Horizonte temporal**: Predicciones futuras basadas en patrones históricos
+- **Aplicaciones**: Optimización de estrategias de marketing, personalización de ofertas, gestión de inventarios y fortalecimiento de la lealtad de clientes
 
 ## Arquitectura del Sistema
 
+### Estructura de Directorios
+
 ```
 Modelamiento/
-├── Core del Modelo
-│   ├── model/                          # Módulo principal del modelo
-│   │   ├── __init__.py
-│   │   ├── VERSION                     # Control de versiones
-│   │   ├── config.yml                  # Configuración base
-│   │   ├── pipeline_improved.py        # Pipeline de preprocessing
-│   │   ├── predict_improved.py         # Módulo de predicción
-│   │   └── train_pipeline_improved.py  # Pipeline de entrenamiento
-│   │
-│   ├── Configuraciones
-│   │   ├── config/
-│   │   │   ├── __init__.py
-│   │   │   ├── core.py                 # Configuración central
-│   │   │   ├── improved_config.yml     # Configuración del modelo mejorado
-│   │   │   └── mlflow_config.py        # Configuración de MLflow
-│   │
-│   ├── Datos
-│   │   ├── datasets/
-│   │   │   ├── __init__.py
-│   │   │   └── data_lifemiles.csv     # Dataset principal
-│   │
-│   ├── Procesamiento
-│   │   ├── processing/
-│   │   │   ├── __init__.py
-│   │   │   ├── data_manager.py         # Gestión de datos
-│   │   │   ├── features_improved.py    # Ingeniería de features
-│   │   │   └── validation.py           # Validación de datos
-│   │
-│   └── Modelos Entrenados
-│       └── trained/
-│           ├── __init__.py
-│           ├── modelo-lifemiles-forecast-improved-output_preprocessing_0.0.1.pkl
-│           └── store_models/           # Modelos por tienda
-│
-├── Scripts de Ejecución
-│   ├── run_improved_training.py        # Entrenamiento principal
-│   ├── run_improved_predictions.py     # Predicciones mejoradas
-│   ├── generate_predictions.py         # Generación de predicciones futuras
-│   ├── show_predictions_table.py       # Visualización de predicciones
-│   └── test_predictions.py             # Testing de predicciones
-│
-├── MLflow y Tracking
-│   ├── mlflow_explorer.py              # Explorador de experimentos
-│   ├── MLflow_README.md                # Documentación de MLflow
-│   └── mlruns/                         # Experimentos y artefactos
-│
-├── Configuración del Proyecto
-│   ├── requirements/
-│   │   ├── requirements.txt            # Dependencias principales
-│   │   ├── test_requirements.txt       # Dependencias de testing
-│   │   └── typing_requirements.txt     # Dependencias de typing
-│   ├── pyproject.toml                  # Configuración de proyecto
-│   ├── setup.py                        # Setup del paquete
-│   └── MANIFEST.in                     # Archivos incluidos en distribución
-│
-├── Testing
-│   └── tests/
-│       └── test_prediction.py          # Tests unitarios
-│
-├── Outputs
-│   └── predicciones_futuras.csv        # Archivo de predicciones generadas
-│
-└── Infraestructura
-    └── llavep2.pem                     # Clave SSH para VM
+├── model/                              # Paquete principal del modelo
+│   ├── config/                         # Configuraciones
+│   │   ├── core.py                     # Configuración base
+│   │   ├── improved_config.yml         # Configuración avanzada
+│   │   └── mlflow_config.py            # Configuración MLflow
+│   ├── processing/                     # Procesamiento de datos
+│   │   ├── data_manager.py             # Gestión de datos
+│   │   ├── features_improved.py        # Ingeniería de características
+│   │   └── validation.py               # Validaciones
+│   ├── datasets/                       # Datos de entrenamiento
+│   ├── trained/                        # Modelos entrenados
+│   ├── config.yml                      # Configuración principal
+│   ├── pipeline_improved.py            # Pipeline de predicción
+│   ├── predict_improved.py             # Módulo de predicción
+│   └── train_pipeline_improved.py      # Pipeline de entrenamiento
+├── requirements/                       # Dependencias
+│   ├── requirements.txt                # Dependencias principales
+│   ├── test_requirements.txt           # Dependencias de testing
+│   └── typing_requirements.txt         # Dependencias de tipos
+├── tests/                              # Tests unitarios
+├── mlruns/                             # Experimentos MLflow
+├── scripts de ejecución/               # Scripts principales
+└── herramientas de análisis/           # Utilidades
 ```
 
 ## Componentes Principales
 
-### 1. Core del Modelo (`model/`)
+### 1. Scripts de Ejecución Principal
 
-#### **Pipeline de Preprocessing (`pipeline_improved.py`)**
-- Pipeline de scikit-learn para preprocessing automático
-- Manejo de valores faltantes
-- Codificación de variables categóricas
-- Normalización y escalado de features
+#### `run_improved_training.py`
+**Propósito**: Script principal para ejecutar el entrenamiento de modelos
 
-#### **Entrenamiento (`train_pipeline_improved.py`)**
-- Pipeline completo de entrenamiento
-- Entrenamiento por tienda individual
-- Validación cruzada con Time Series Split
-- Métricas: R², SMAPE, MAE, RMSE
-- Integración con MLflow para tracking
-- Gestión automática de modelos por tienda
+**Características**:
+- Entrena modelos individuales por tienda
+- Soporte para entrenamiento limitado (testing/debugging)
+- Configuración flexible de parámetros
+- Integración completa con MLflow
+- Métricas de rendimiento automáticas
 
-#### **Predicción (`predict_improved.py`)**
-- Carga automática de modelos entrenados
-- Predicciones individuales por tienda
-- Manejo de errores y fallbacks
-- Validación de datos de entrada
-
-### 2. Ingeniería de Features (`processing/features_improved.py`)
-
-El sistema implementa **42 características avanzadas** organizadas en categorías:
-
-#### **Features Temporales Básicas (8)**
-- Año, mes, día, día de la semana
-- Trimestre, número de semana
-- Indicadores de fin de semana
-- Días desde el inicio del dataset
-
-#### **Features Temporales Avanzadas (6)**
-- Trigonométricas (sin/cos) para mes y día de la semana
-- Indicadores de días especiales (inicio/fin de mes/año)
-- Patrones cíclicos estacionales
-
-#### **Lag Features (6)**
-- Valores históricos (lag 1, 7, 14, 30 días)
-- Promedios móviles de diferentes ventanas
-- Tendencias a corto y mediano plazo
-
-#### **Features de Volatilidad y Tendencia (7)**
-- Desviación estándar móvil
-- Coeficiente de variación
-- Tendencias lineales por ventanas
-- Momentum y aceleración
-
-#### **Features de Ranking y Percentiles (8)**
-- Rankings por partner y globales
-- Percentiles de millas por período
-- Posiciones relativas en distribuciones
-
-#### **Features de Autocorrelación (7)**
-- Autocorrelaciones con diferentes lags
-- Detección de patrones estacionales
-- Medidas de persistencia temporal
-
-### 3. MLflow Integration
-
-#### **Tracking de Experimentos**
-- **Experimento Principal**: `LifeMiles_Forecasting_Training`
-- **Métricas Registradas**: R², SMAPE, MAE, RMSE
-- **Parámetros**: Configuración del modelo, preprocessing
-- **Artefactos**: Modelos entrenados, gráficos de performance
-
-#### **Logging Automático**
-- Cada entrenamiento crea un run en MLflow
-- Métricas agregadas del pipeline completo
-- Distribución de calidad de modelos
-- Comparación de objetivos vs resultados
-
-### 4. Scripts de Ejecución
-
-#### **Entrenamiento (`run_improved_training.py`)**
+**Uso**:
 ```bash
-# Entrenamiento completo
+# Entrenar todas las tiendas (producción)
 python run_improved_training.py
 
-# Entrenamiento limitado (testing)
-python run_improved_training.py --n 5
+# Entrenar solo 1 tienda (testing)
+python run_improved_training.py --n 1
 
-# Con verbosidad
-python run_improved_training.py --verbose
+# Entrenar 10 tiendas (debugging)
+python run_improved_training.py --n 10
+
+# Configurar mínimo de muestras por tienda
+python run_improved_training.py --min-samples 50
 ```
 
-**Funcionalidades:**
-- Entrenamiento masivo o limitado por número de tiendas
-- Validación automática de datos
-- Reporte detallado de performance
-- Guardado automático de modelos
+#### `run_improved_predictions.py`
+**Propósito**: Script principal para generar predicciones
 
-#### **Predicciones (`run_improved_predictions.py`)**
-```bash
-# Predicciones para datos existentes
-python run_improved_predictions.py
+**Características**:
+- Carga modelos entrenados automáticamente
+- Genera predicciones para tiendas específicas o todas
+- Exporta resultados en CSV
+- Validación de calidad de predicciones
 
-# Para tienda específica
-python run_improved_predictions.py --store COBU3_11475795
-```
+### 2. Módulo de Configuración (`model/config/`)
 
-#### **Predicciones Futuras (`generate_predictions.py`)**
-```bash
-# Próximos 7 días (default)
-python generate_predictions.py
+#### `config.yml`
+**Configuración principal del sistema**:
 
-# Próximos 30 días
-python generate_predictions.py --days 30
-
-# Desde fecha específica
-python generate_predictions.py --start-date 2024-01-01
-```
-
-### 5. Configuración del Modelo
-
-#### **Algoritmo Principal: Random Forest Mejorado**
 ```yaml
-model_config:
-  algorithm_name: 'random_forest_improved'
-  n_estimators: 200        # Incrementado para mejor performance
-  max_depth: 15            # Balanceado para evitar overfitting
-  min_samples_split: 5     # Control de complejidad
-  min_samples_leaf: 2      # Regularización
-  max_features: 'sqrt'     # Reducción de varianza
-  random_state: 42
-  n_jobs: -1              # Paralelización completa
+# Variable objetivo
+target: billings
+
+# Features principales organizadas por categoría
+base_features:          # Características temporales básicas
+advanced_temporal_features:  # Características temporales avanzadas
+lag_features:          # Valores históricos (lag 1, 2, 3, 7, 14, 30 días)
+rolling_features:      # Estadísticas móviles (media, desviación estándar)
+trend_features:        # Características de tendencia
+volatility_features:   # Características de volatilidad
+seasonal_features:     # Características estacionales
+growth_features:       # Características de crecimiento
 ```
 
-#### **Preprocessing Avanzado**
-```yaml
-preprocessing:
-  remove_outliers: true
-  outlier_method: 'iqr'
-  iqr_factor: 2.0
-  transform_target: true
-  target_transformation: 'log_plus_one'
+#### `improved_config.yml`
+Configuración avanzada con hiperparámetros optimizados para diferentes algoritmos.
+
+#### `mlflow_config.py`
+Configuración de MLflow para tracking de experimentos.
+
+### 3. Procesamiento de Datos (`model/processing/`)
+
+#### `data_manager.py`
+**Funciones principales**:
+- `load_dataset()`: Carga y estandariza datasets
+- `save_pipeline()`, `load_pipeline()`: Persistencia de pipelines
+- Mapeo automático de columnas
+- Creación de identificadores únicos de tienda
+
+#### `features_improved.py`
+**Ingeniería de características avanzada**:
+- **Features temporales**: año, mes, día de la semana, trimestre, etc.
+- **Features de lag**: valores históricos (1, 2, 3, 7, 14, 30 días)
+- **Features de rolling**: estadísticas móviles (media, std) en ventanas de 7 y 30 días
+- **Features de tendencia**: cambios porcentuales en diferentes períodos
+- **Features de volatilidad**: medidas de variabilidad
+- **Features estacionales**: patrones cíclicos
+- **Features de crecimiento**: tasas de crecimiento
+
+#### `validation.py`
+Validaciones de calidad de datos y consistencia.
+
+### 4. Pipeline de Entrenamiento (`train_pipeline_improved.py`)
+
+#### Arquitectura del Pipeline
+1. **Carga y preprocessamiento de datos**
+2. **Filtrado por tienda individual**
+3. **Ingeniería de características automatizada**
+4. **Entrenamiento de múltiples algoritmos**:
+   - Random Forest
+   - Gradient Boosting
+   - XGBoost
+   - LightGBM
+   - Linear Regression
+5. **Selección automática del mejor modelo**
+6. **Validación y métricas de calidad**
+7. **Persistencia del modelo ganador**
+
+#### Métricas de Evaluación
+- **R² Score**: Coeficiente de determinación (objetivo: ≥0.8)
+- **SMAPE**: Error porcentual absoluto medio simétrico (objetivo: ≤10%)
+- **MAE**: Error absoluto medio
+- **RMSE**: Error cuadrático medio
+- **Clasificación de calidad**: EXCELENTE, BUENO, ACEPTABLE, POBRE
+
+#### Integración MLflow
+- Logging automático de parámetros y métricas
+- Tracking de experimentos por tienda
+- Comparación de modelos
+- Gestión de artefactos
+
+### 5. Pipeline de Predicción (`predict_improved.py`)
+
+#### Funcionalidades
+- Carga automática de modelos entrenados
+- Generación de predicciones para nuevos datos
+- Aplicación automática del pipeline de features
+- Validación de calidad de predicciones
+
+### 6. Herramientas de Análisis
+
+#### `mlflow_explorer.py`
+**Explorador de experimentos MLflow**:
+```bash
+# Servidor web MLflow
+python mlflow_explorer.py --serve
+
+# Análisis de experimentos
+python mlflow_explorer.py --analysis
+
+# Comparación de modelos
+python mlflow_explorer.py --compare
 ```
 
-## Métricas y Performance
+#### `show_predictions_table.py`
+Visualización de predicciones en formato tabular.
 
-### **Objetivos del Modelo**
-- **R² Target**: ≥ 0.8 (Excelente predictibilidad)
-- **SMAPE Target**: ≤ 10% (Error promedio bajo)
+#### `test_predictions.py`
+Testing de predicciones y validación de calidad.
 
-### **Clasificación de Calidad**
-- **EXCELENTE**: R² ≥ 0.8 y SMAPE ≤ 10%
-- **BUENO**: R² ≥ 0.6 y SMAPE ≤ 20%
-- **REGULAR**: R² ≥ 0.4 y SMAPE ≤ 30%
-- **POBRE**: Por debajo de los umbrales anteriores
+### 7. Sistema de Testing (`tests/`)
 
-### **Métricas Reportadas**
-- **R² (Coeficiente de Determinación)**: Varianza explicada
-- **SMAPE (Symmetric Mean Absolute Percentage Error)**: Error porcentual
-- **MAE (Mean Absolute Error)**: Error absoluto promedio
-- **RMSE (Root Mean Square Error)**: Error cuadrático medio
+Tests unitarios para validación de componentes:
+- Test de predicciones
+- Validación de pipelines
+- Test de consistencia de datos
 
 ## Flujo de Trabajo
 
-### **1. Entrenamiento**
+### 1. Entrenamiento de Modelos
+
+```mermaid
+graph TD
+    A[Datos CSV] --> B[Carga y Limpieza]
+    B --> C[Filtro por Tienda]
+    C --> D[Ingeniería de Features]
+    D --> E[División Train/Test]
+    E --> F[Entrenamiento Multi-Algoritmo]
+    F --> G[Selección Mejor Modelo]
+    G --> H[Validación]
+    H --> I[Persistencia]
+    I --> J[MLflow Logging]
 ```
-Datos → Features Engineering → Preprocessing → Training → Validation → Model Storage → MLflow Logging
+
+### 2. Generación de Predicciones
+
+```mermaid
+graph TD
+    A[Datos Nuevos] --> B[Carga Modelo]
+    B --> C[Aplicar Pipeline Features]
+    C --> D[Generar Predicciones]
+    D --> E[Validar Calidad]
+    E --> F[Exportar Resultados]
 ```
 
-### **2. Predicción**
+## Configuración del Ambiente
+
+### Dependencias Principales
+```txt
+pandas>=1.5.0
+scikit-learn>=1.1.0
+xgboost>=1.6.0
+lightgbm>=3.3.0
+mlflow>=2.0.0
+joblib>=1.2.0
+pyyaml>=6.0
 ```
-Nuevos Datos → Features Engineering → Preprocessing → Modelo Cargado → Predicción → Validación → Output
-```
 
-### **3. Predicciones Futuras**
-```
-Fecha Objetivo → Generación de Features → Modelos por Tienda → Agregación → CSV Output
-```
-
-## Dependencias Principales
-
-### **Core ML Stack**
-- **scikit-learn**: Algoritmos de ML y pipeline
-- **pandas**: Manipulación de datos
-- **numpy**: Computación numérica
-
-### **Tracking y Experimentación**
-- **mlflow**: Tracking de experimentos y modelos
-- **matplotlib/seaborn**: Visualizaciones
-- **plotly**: Gráficos interactivos
-
-### **Utilities**
-- **joblib**: Serialización de modelos
-- **pydantic**: Validación de configuraciones
-- **strictyaml**: Configuraciones YAML seguras
-
-## Testing y Validación
-
-### **Tests Automatizados**
-- Tests unitarios para predicciones
-- Validación de pipeline completo
-- Tests de integración con MLflow
-
-### **Validación de Modelos**
-- Time Series Cross Validation
-- Validación por tienda individual
-- Análisis de residuos y distribuciones
-
-## Archivos de Salida
-
-### **Modelos Entrenados**
-- `modelo-lifemiles-forecast-improved-*.pkl`: Pipeline de preprocessing
-- `store_models/model_*.pkl`: Modelos individuales por tienda
-
-### **Predicciones**
-- `predicciones_futuras.csv`: Predicciones futuras generadas
-- Archivos temporales de validación en testing
-
-### **MLflow Artifacts**
-- Gráficos de performance por modelo
-- Métricas de validación
-- Configuraciones de entrenamiento
-
-## Uso en Producción
-
-### **Entrenamiento Programado**
-1. Ejecutar `run_improved_training.py` periódicamente
-2. Monitorear performance en MLflow UI
-3. Validar métricas contra objetivos
-4. Actualizar modelos en producción
-
-### **Predicciones en Tiempo Real**
-1. Usar `run_improved_predictions.py` para datos existentes
-2. Usar `generate_predictions.py` para forecasting
-3. Integrar con sistemas downstream via CSV
-
-### **Monitoreo**
-1. MLflow UI para tracking de experimentos
-2. Métricas de performance agregadas
-3. Alertas basadas en degradación de R² o aumento de SMAPE
-
-## Configuración del Entorno
-
-### **Instalación**
+### Setup del Proyecto
 ```bash
+# Instalar dependencias
 pip install -r requirements/requirements.txt
+
+# Configurar ambiente Python
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# Instalar paquete en modo desarrollo
+pip install -e .
 ```
 
-### **MLflow UI**
+## Uso del Sistema
+
+### Entrenamiento Completo
 ```bash
+# Entrenamiento completo (todas las tiendas)
+python run_improved_training.py
+
+# Revisar resultados en MLflow
 python mlflow_explorer.py --serve
-# Acceso en: http://localhost:5000
 ```
 
-### **Variables de Entorno**
-- MLflow tracking automático en `./mlruns/`
-- Configuraciones en archivos YAML
-- Logs automáticos en consola y MLflow
+### Predicciones
+```bash
+# Generar predicciones
+python run_improved_predictions.py
+
+# Ver resultados
+python show_predictions_table.py
+```
+
+### Monitoreo y Análisis
+```bash
+# Explorar experimentos
+python mlflow_explorer.py --analysis
+
+# Testing de predicciones
+python test_predictions.py
+```
+
+## Objetivos de Rendimiento
+
+### Métricas Objetivo
+- **R² Score**: ≥ 0.8 (excelente ajuste)
+- **SMAPE**: ≤ 10% (error bajo)
+- **Cobertura**: ≥ 80% de tiendas con modelos de calidad BUENA o superior
+
+### Clasificación de Calidad
+- **EXCELENTE**: R² ≥ 0.9 y SMAPE ≤ 5%
+- **BUENO**: R² ≥ 0.8 y SMAPE ≤ 10%
+- **ACEPTABLE**: R² ≥ 0.6 y SMAPE ≤ 15%
+- **POBRE**: Por debajo de los anteriores
+
+## Deployment y Producción
+
+### Ambiente de Desarrollo
+- MLflow para tracking de experimentos
+- Notebooks Jupyter para análisis exploratorio
+- Testing automatizado
+
+### Ambiente de Producción (AWS)
+- MySQL para almacenamiento de datos procesados
+- Automatización de entrenamiento
+- Ejecución continua de predicciones
+- Monitoreo de modelos
+
+## Troubleshooting
+
+### Problemas Comunes
+
+1. **Error de variables no definidas**: Verificar scope de variables en funciones
+2. **Modelos que no entrenan**: Verificar calidad y cantidad de datos por tienda
+3. **Predicciones inconsistentes**: Validar pipeline de features
+4. **MLflow no guarda**: Verificar configuración de tracking URI
+
+### Logs y Debugging
+- Logs detallados en cada etapa del pipeline
+- Modo verbose para debugging
+- Tracking completo en MLflow
+- Tests automatizados para validación
+
+## Contacto y Soporte
+
+Para dudas o soporte técnico, consultar:
+- Documentación de MLflow: `MLflow_README.md`
+- Tests unitarios en `tests/`
+- Configuraciones en `model/config/`
 
 ---
 
-**Fecha de documentación**: Septiembre 2025  
-**Versión del modelo**: 0.0.1  
-**Autor**: Sistema LifeMiles ML Pipeline
+*Este documento describe la implementación completa del sistema de forecasting de LifeMiles para predicción de billings por tienda.*
