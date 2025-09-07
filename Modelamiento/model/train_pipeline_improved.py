@@ -399,9 +399,16 @@ def run_training_improved(max_stores: int = None, min_samples: int = 1, verbose:
             print(f"\nTARGET ACHIEVEMENT:")
             r2_achieved = "ACHIEVED" if avg_r2 >= target_r2 else "NOT ACHIEVED"
             smape_achieved = "ACHIEVED" if avg_smape <= target_smape else "NOT ACHIEVED"
-        
-        print(f"  R² Target ({target_r2:.1f}): {r2_achieved} Achieved {avg_r2:.3f}")
-        print(f"  SMAPE Target ({target_smape:.1f}%): {smape_achieved} Achieved {avg_smape:.1f}%")
+            
+            print(f"  R² Target ({target_r2:.1f}): {r2_achieved} Achieved {avg_r2:.3f}")
+            print(f"  SMAPE Target ({target_smape:.1f}%): {smape_achieved} Achieved {avg_smape:.1f}%")
+        else:
+            # No successful results - still define target metrics for logging
+            target_r2 = getattr(config.model_config, 'target_metrics', {}).get('min_r2_score', 0.8)
+            target_smape = getattr(config.model_config, 'target_metrics', {}).get('max_smape_score', 10.0)
+            print(f"\nNo successful models to evaluate targets")
+            print(f"  R² Target: {target_r2:.1f}")
+            print(f"  SMAPE Target: {target_smape:.1f}%")
         
         # MLflow - Log de métricas agregadas del experimento
         mlflow.log_metric("total_stores_attempted", len(valid_stores))
@@ -426,11 +433,15 @@ def run_training_improved(max_stores: int = None, min_samples: int = 1, verbose:
             # Logros de objetivos
             mlflow.log_metric("r2_target_achieved", 1 if avg_r2 >= target_r2 else 0)
             mlflow.log_metric("smape_target_achieved", 1 if avg_smape <= target_smape else 0)
+        else:
+            # No successful results - log 0 for target achievements
+            mlflow.log_metric("r2_target_achieved", 0)
+            mlflow.log_metric("smape_target_achieved", 0)
             
-            # Tags para organización
-            mlflow.set_tag("experiment_type", "batch_training")
-            mlflow.set_tag("data_size", f"{data.shape[0]} rows")
-            mlflow.set_tag("training_mode", "limited" if max_stores else "full")
+        # Tags para organización (always set)
+        mlflow.set_tag("experiment_type", "batch_training")
+        mlflow.set_tag("data_size", f"{data.shape[0]} rows")
+        mlflow.set_tag("training_mode", "limited" if max_stores else "full")
             
         print(f"\nMLflow experiment logged successfully!")
         
