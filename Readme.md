@@ -6,6 +6,36 @@ Proyecto de ciencia de datos enfocado en el desarrollo de soluciones analíticas
 
 Este proyecto implementa un pipeline de ciencia de datos completo, desde el análisis exploratorio hasta el desarrollo de modelos predictivos, utilizando herramientas modernas para el versionado de datos y reproducibilidad de experimentos.
 
+## Breve explicación del código predictivo
+
+Carga de modelos entrenados por tienda.
+El script busca archivos en model/trained/store_models/ con el patrón model_<partner>_<store>.pkl y los carga con joblib. Cada archivo representa un modelo ya entrenado para una tienda particular (identificada por <partner_code>_<store_code>).
+
+Definición del horizonte de predicción.
+A partir de los argumentos de línea de comandos, se define la fecha de inicio (por defecto, mañana) y el número de días a predecir (por defecto, 7). También se puede limitar a una tienda específica con --store PARTNER_STORE.
+
+Plantilla de datos futuros.
+Usando los datos históricos (cargados desde la ruta configurada en config.app_config.train_data_file), se genera una plantilla para las fechas futuras de cada tienda.
+
+Se toma una ventana reciente (p. ej., últimos 60 días) como referencia.
+
+Se extraen estadísticas por día de la semana para el target (típicamente billings), y se generan valores simulados (media por día ± ruido controlado) para alimentar el pipeline de features.
+
+Se actualizan las variables temporales: año, mes, día, trimestre, semana del año, día de la semana, banderas de inicio/fin de mes, etc.
+
+Opcionalmente se simulan otras columnas (p. ej., promocion_activa, precio_promedio, etc.) con pequeñas variaciones.
+
+Preprocesamiento + predicción.
+La plantilla se transforma con lifemiles_improved_preprocessing_pipe y, sobre las columnas disponibles definidas en get_improved_feature_columns(), se ejecuta el método .predict() del modelo correspondiente a la tienda. El resultado es un DataFrame con: fecha, partner, tienda y predicted_monto.
+
+Salida y resumen.
+
+Se imprime un resumen en consola por tienda (rango de fechas y totales).
+
+Se consolidan todas las predicciones y se guardan en un CSV (por defecto, predicciones_futuras.csv, modificable con --output).
+
+Se reporta el total de predicciones y tiendas procesadas.
+
 ## 🏗️ Estructura del Proyecto
 
 ```
@@ -88,10 +118,10 @@ Contiene notebooks de Jupyter con análisis exploratorio detallado de los datos,
 
 ## 📈 Próximos Pasos
 
-- [ ] Agregar documentación detallada de metodología
-- [ ] Implementar pipeline de ML automatizado
-- [ ] Agregar tests unitarios para funciones de procesamiento
-- [ ] Crear visualizaciones interactivas
+- [x] Agregar documentación detallada de metodología
+- [x] Implementar pipeline de ML automatizado
+- [x] Agregar tests unitarios para funciones de procesamiento
+- [x] Crear visualizaciones interactivas
 
 ## 📄 Licencia
 
